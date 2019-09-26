@@ -348,8 +348,8 @@ inline at::ScalarType PythonArgs::scalartype(int i) {
 }
 
 inline c10::optional<at::ScalarType> PythonArgs::scalartypeOptional(int i) {
-  if (!args[i])
-    return c10::nullopt;
+  //if (!args[i])
+  //  return c10::nullopt;
   return scalartype(i);
 }
 

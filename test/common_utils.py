@@ -1225,7 +1225,7 @@ def do_test_dtypes(self, dtypes, layout, device):
 
 def do_test_empty_full(self, dtypes, layout, device):
     shape = torch.Size([2, 3])
-
+    print("1")
     def check_value(tensor, dtype, layout, device, value, requires_grad):
         self.assertEqual(shape, tensor.shape)
         self.assertIs(dtype, tensor.dtype)
@@ -1243,15 +1243,24 @@ def do_test_empty_full(self, dtypes, layout, device):
             return torch.int64
         return operator.attrgetter(module)(torch).int64
 
+    print("2")
     default_dtype = torch.get_default_dtype()
+    print("3: ", default_dtype)
     check_value(torch.empty(shape), default_dtype, torch.strided, -1, None, False)
     check_value(torch.full(shape, -5), default_dtype, torch.strided, -1, None, False)
+    print("4")
     for dtype in dtypes:
         for rg in {dtype.is_floating_point, False}:
+            print("5: ", dtype, " ", rg)
             int64_dtype = get_int64_dtype(dtype)
             v = torch.empty(shape, dtype=dtype, device=device, layout=layout, requires_grad=rg)
+            print("6: ", v)
             check_value(v, dtype, layout, device, None, rg)
             out = v.new()
+            print("7: ", out)
+            print("8: ", device, " ", layout, " ", rg)
+            print("9: ", torch.empty(shape, out=out, device=device, layout=layout, requires_grad=rg))
+            
             check_value(torch.empty(shape, out=out, device=device, layout=layout, requires_grad=rg),
                         dtype, layout, device, None, rg)
             check_value(v.new_empty(shape), dtype, layout, device, None, False)
