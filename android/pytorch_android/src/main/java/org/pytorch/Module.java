@@ -2,7 +2,6 @@
 
 package org.pytorch;
 
-import com.facebook.jni.HybridData;
 import com.facebook.soloader.nativeloader.NativeLoader;
 import com.facebook.soloader.nativeloader.SystemDelegate;
 
@@ -11,7 +10,7 @@ import com.facebook.soloader.nativeloader.SystemDelegate;
  */
 public class Module {
 
-  private NativePeer mNativePeer;
+  private INativePeer mNativePeer;
 
   /**
    * Loads a serialized TorchScript module from the specified path on the disk.
@@ -20,14 +19,14 @@ public class Module {
    * @return new {@link org.pytorch.Module} object which owns torch::jit::script::Module.
    */
   public static Module load(final String modelPath) {
-    return new Module(modelPath);
-  }
-
-  private Module(final String moduleAbsolutePath) {
     if (!NativeLoader.isInitialized()) {
       NativeLoader.init(new SystemDelegate());
     }
-    this.mNativePeer = new NativePeer(moduleAbsolutePath);
+    return new Module(new NativePeer(modelPath));
+  }
+
+  Module(INativePeer nativePeer) {
+    this.mNativePeer = nativePeer;
   }
 
   /**
@@ -59,24 +58,6 @@ public class Module {
    * See {@link com.facebook.jni.HybridData#resetNative}.
    */
   public void destroy() {
-    mNativePeer.mHybridData.resetNative();
-  }
-
-  private static class NativePeer {
-    static {
-      NativeLoader.loadLibrary("pytorch_jni");
-    }
-
-    private final HybridData mHybridData;
-
-    private static native HybridData initHybrid(String moduleAbsolutePath);
-
-    NativePeer(String moduleAbsolutePath) {
-      mHybridData = initHybrid(moduleAbsolutePath);
-    }
-
-    private native IValue forward(IValue... inputs);
-
-    private native IValue runMethod(String methodName, IValue... inputs);
+    mNativePeer.resetNative();
   }
 }
