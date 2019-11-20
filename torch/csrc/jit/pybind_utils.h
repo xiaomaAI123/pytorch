@@ -170,6 +170,25 @@ inline InferredType tryToInferContainerType(py::handle input) {
         return type_match.reason();
       }
     }
+    if (py::hasattr(input, "_fields")) {
+      // If the tuple is a NamedTuple type
+      auto qualifiedName = c10::QualifiedName(py::cast<std::string>(
+          py::module::import("torch.jit").attr("_qualified_name")(input.get_type())));
+      auto PyCu = get_python_cu();
+      c10::NamedTypePtr named_tuple_type = PyCu->get_named_tuple(qualifiedName);
+      if (named_tuple_type != nullptr) {
+        // If the python_cu already contains the type, just return it
+        return InferredType(named_tuple_type);
+      } else {
+        // Otherwise fetch the names correspondingly and create a new NamedTuple type
+        std::vector<std::string> fields
+          = py::cast<std::vector<std::string>>(input.get_type().attr("_fields"));
+        c10::NamedTypePtr named_tuple = TupleType::createNamed(qualifiedName, fields, element_types);
+        // register the named tuple type to the python cu to share with scripting
+        PyCu->register_type(named_tuple);
+        return InferredType(named_tuple);
+      }
+    }
     return InferredType(TupleType::create(element_types));
   } else if (PyDict_Check(input.ptr())) {
     // Check to make sure we can generate useful input/output types
