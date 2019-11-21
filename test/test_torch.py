@@ -2633,7 +2633,7 @@ class _TestTorchMixin(object):
             dest2[idx[i]] = dest2[idx[i]] + src[i]
         self.assertEqual(dest, dest2)
 
-    # add coverage for issue with atomic add that appeared only for 
+    # add coverage for issue with atomic add that appeared only for
     # specific dtypes on cuda:
     # https://github.com/pytorch/pytorch/issues/29153
     def test_index_add_all_dtypes(self):
@@ -12905,7 +12905,7 @@ class TestTorchDeviceType(TestCase):
         def transformation_fn(tensor, **kwargs):
             return tensor.clone(**kwargs)
 
-        self._test_memory_format_transformations(device, input_generator_fn, transformation_fn, True)
+        self._test_memory_format_transformations(device, input_generator_fn, transformation_fn, True, default_is_preserve=True)
 
     @onlyCPU
     @dtypes(torch.double)
