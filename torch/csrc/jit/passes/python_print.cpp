@@ -1240,6 +1240,23 @@ struct PythonPrintImpl {
         body_ << name << " : " << type->python_str() << "\n";
       }
     }
+
+    size_t numConstants = moduleType->numConstants();
+    for (size_t i = 0; i < numConstants; i++) {
+      const auto& name = moduleType->getConstantName(i);
+      const auto& v = moduleType->getConstant(name).value();
+
+      indent();
+      body_ << name << " : " << "Final[" + v.type()->python_str() << "] = ";
+      if (v.isString()) {
+        body_ << "'" << v.toStringRef() << "'\n";
+      } else if (v.isDevice()) {
+        body_ << "torch.device(";
+        body_ << "'" << v.toDevice() << "')\n";
+      } else {
+        body_ << v << "\n";
+      }
+    }
   }
 
   void printNamedType(const c10::NamedTypePtr& type) {
