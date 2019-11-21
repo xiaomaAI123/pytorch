@@ -405,7 +405,7 @@ def create_python_bindings(python_functions, has_self, is_module=False):
                 if inp['name'] == 'memory_format':
                     inputs.remove(inp)
                     inputs.insert(dtypeIndex, inp)
-        
+
         outputs = [arg for arg in declaration['arguments'] if is_output(arg)]
 
         #has_tensor_options = any(arg['simple_type'] == 'TensorOptions' for arg in declaration['arguments'])
@@ -481,10 +481,6 @@ def create_python_bindings(python_functions, has_self, is_module=False):
         #arg_idx = arg_idx if out_idx is None else out_idx #+ 1
         # We always want to unpack when we have TensorOptions.
         unpack = has_tensor_options
-        if declaration['name'] == 'new_empty':
-            print("\n\n\n\n\n\ ===+>")
-            print(declaration)
-            print(inputs)
         for arg in inputs:
             if out_idx is not None and arg_idx == out_idx:
                 #skip output
@@ -624,10 +620,6 @@ def create_python_bindings(python_functions, has_self, is_module=False):
             body.append(PY_VARIABLE_WRAP.substitute(env, call_dispatch=call_dispatch))
         py_method_dispatch.append(PY_VARIABLE_DISPATCH.substitute(env))
         
-        if declaration['name'] == 'new_empty':
-            print("\n\n\n\n\n")
-            print(body)
-
         return body
 
     def emit_dispatch(i, dictionary, base_env):
@@ -994,6 +986,14 @@ def get_python_signature(declaration, include_out):
             if arg['simple_type'] == 'Layout?':
                 continue
             if arg['simple_type'] == 'bool?':
+                continue
+            if arg['simple_type'] == 'ScalarType':
+                continue
+            if arg['simple_type'] == 'Device':
+                continue
+            if arg['simple_type'] == 'Layout':
+                continue
+            if arg['simple_type'] == 'bool':
                 continue
         if arg.get('kwarg_only', False) and positional:
             py_formal_args.append('*')
