@@ -25,7 +25,6 @@ if is_available():
     def init_rpc(
         name,
         backend=backend_registry.BackendType.PROCESS_GROUP,
-        init_method=None,
         rank=-1,
         world_size=None,
         rpc_backend_options=None,
@@ -50,15 +49,24 @@ if is_available():
                         ``Worker1``) Name can only contain number, alphabet,
                         underscore, and/or dash, and must be shorter than
                         128 characters.
-            init_method(str): backend specific init arguments.
+            init_method(str): URL specifying how to initialize the
+                                     RPC backend. Default is "env://" if no
+                                     ``init_method`` is specified.
             rank (int): a globally unique id/rank of this node.
             world_size (int): The number of workers in the group.
             rpc_backend_options (RpcBackendOptions): The options passed to RpcAgent
                 consturctor.
         """
+
+        if not rpc_backend_options:
+            # default construct a set of RPC agent options.
+            rpc_backend_options = rpc.backend_registry.construct_rpc_backend_options(
+                backend
+            )
+
         # Rendezvous.
         rendezvous_iterator = torch.distributed.rendezvous(
-            init_method, rank=rank, world_size=world_size
+            rpc_backend_options.init_method, rank=rank, world_size=world_size
         )
         store, _, _ = next(rendezvous_iterator)
 
