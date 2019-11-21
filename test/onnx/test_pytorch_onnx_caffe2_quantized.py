@@ -4,6 +4,7 @@ import numpy as np
 import unittest
 import torch.onnx
 import io
+import torch.nn as nn
 
 import onnx
 import caffe2.python.onnx.backend as c2
@@ -129,6 +130,40 @@ class TestQuantizedOps(unittest.TestCase):
 
         # Permute pytorch output to NHWC
         np.testing.assert_almost_equal(outputs.permute(0, 2, 3, 1).numpy(), caffe_res, decimal=3)
+
+    def test_upsample(self):
+        class QUpsampleModule(torch.nn.Module):
+            def __init__(self):
+                super(QUpsampleModule, self).__init__()
+                self.quant1 = torch.quantization.QuantStub()
+                self.dequant = torch.quantization.DeQuantStub()
+
+            def forward(self, x):
+                res = torch.nn.quantized.functional.interpolate(self.quant1(x), size=[6, 8], mode='nearest')
+                return self.dequant(res)
+
+        x = np.random.rand(1, 2, 3, 4).astype("float32")
+        self.generic_test(QUpsampleModule(), (x,), input_names=["x"])
+
+    def test_quantized_ts(self):
+        torch.backends.quantized.engine = "qnnpack"
+        module_quant = torch.jit.load("/home/supriyar/pytorch/quantized_ts.pt")
+
+        input_img = torch.from_numpy(np.random.random((1, 3, 48, 64)).astype("float32"))
+        input_fp =  torch.from_numpy(np.random.random((1, 12, 48, 64)).astype("float32"))
+        X = torch.from_numpy(np.random.random((1, 2)).astype("float32"))
+        module_quant.eval()
+        #print("Printing module code ", module_quant)
+        output = module_quant(input_img, input_fp, X)
+        torch.onnx.export(module_quant, (input_img, input_fp, X), 'quant.onnx', verbose=True, example_outputs=output, operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK, opset_version=9)
+        onnx_model = onnx.load('quant.onnx')
+        input_names = ["img", "fp", "ang"]
+        sample_inputs = (
+            input_img.numpy(),
+            input_fp.numpy(),
+            X.numpy(),
+        )
+        caffe_res = c2.run_model(onnx_model, dict(zip(input_names, sample_inputs)))[0]
 
 if __name__ == '__main__':
     unittest.main()
