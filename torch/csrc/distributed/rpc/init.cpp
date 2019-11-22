@@ -164,6 +164,21 @@ Otherwise, throws an exception.
     agent->start();
   });
 
+  module.def(
+      "shutdown",
+      []() {
+        auto agent = RpcAgent::getDefaultRpcAgent();
+        if (agent) {
+          agent->shutdown();
+        }
+      },
+      R"(
+      Locally shuts down the running RPC agent, without sending messages to
+      other agents to shutdown. This stops the local agent from accepting
+      outstanding requests, and shuts down the RPC framework as quickly as
+      possible by terminating all RPC threads.
+      )");
+
   module.def("_destroy_rref_context", []() {
     RRefContext::getInstance().destroyInstance();
   });
