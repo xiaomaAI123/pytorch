@@ -1,0 +1,208 @@
+import torch
+from torch import nn
+from torch.autograd import Variable
+import torchvision.datasets as dsets
+import torch.utils.data as Data
+import torchvision.transforms as transforms
+from torch.nn import Parameter
+from torch import Tensor
+import math
+from torch.nn import init
+torch.manual_seed(1)
+EPOCH =1
+BATCH_SIZE = 64
+TIME_STEP = 28
+INPUT_SIZE = 28
+Hidden_size=128
+Num_classes=10
+Num_layers=1
+LR = 0.01
+
+# MNIST dataset
+train_dataset = dsets.MNIST(root = '../../data_sets/mnist', 
+                           train = True, 
+                           transform = transforms.ToTensor(),  
+                           download = True )  
+test_dataset = dsets.MNIST(root = '../../data_sets/mnist',  
+                           train = False,  
+                           transform = transforms.ToTensor(),  
+                           download =  True) 
+#加载数据
+
+train_loader = Data.DataLoader(dataset = train_dataset, 
+                                           batch_size = BATCH_SIZE , 
+                                           shuffle = True)   
+test_loader = Data.DataLoader(dataset = test_dataset,
+                                          batch_size = BATCH_SIZE ,
+                                          shuffle = True)
+ #define the cell structure of LSTM
+class LSTM_Cell(nn.Module):
+	def __init__(self, input_size, hidden_size):
+		super(LSTM_Cell, self).__init__()
+		self.input_size = input_size
+		self.hidden_size = hidden_size
+
+		# parameter of input gate
+		self.w_ii = Parameter(Tensor(hidden_size, input_size))
+		self.b_ii = Parameter(Tensor(hidden_size, 1))
+		self.w_hi = Parameter(Tensor(hidden_size, hidden_size))
+		self.b_hi = Parameter(Tensor(hidden_size, 1))
+
+		# parameter of forget gate
+		self.w_if = Parameter(Tensor(hidden_size, input_size))
+		self.b_if = Parameter(Tensor(hidden_size, 1))
+		self.w_hf = Parameter(Tensor(hidden_size, hidden_size))
+		self.b_hf = Parameter(Tensor(hidden_size, 1))
+
+		# parameter of output gate
+		self.w_io = Parameter(Tensor(hidden_size, input_size))
+		self.b_io = Parameter(Tensor(hidden_size, 1))
+		self.w_ho = Parameter(Tensor(hidden_size, hidden_size))
+		self.b_ho = Parameter(Tensor(hidden_size, 1))
+
+		# parameter of cell memory
+		self.w_ic = Parameter(Tensor(hidden_size, input_size))
+		self.b_ic = Parameter(Tensor(hidden_size, 1))
+		self.w_hc = Parameter(Tensor(hidden_size, hidden_size))
+		self.b_hc = Parameter(Tensor(hidden_size, 1))
+		self.reset_weights()
+        
+	def reset_weights(self):
+		stdv = 1.0 / math.sqrt(self.hidden_size)
+		for weight in self.parameters():
+			init.uniform_(weight, -stdv, stdv)
+ 
+	# forward propagation of LSTM cell
+	def forward(self,inputs, h, c):
+		# input gate output
+		i = torch.sigmoid(self.w_ii @ inputs + self.b_ii + self.w_hi @ h + self.b_hi)
+		# forget gate output
+		f = torch.sigmoid(self.w_if @ inputs + self.b_if + self.w_hf @ h + self.b_hf)
+		# output gate output
+		o = torch.sigmoid(self.w_io @ inputs + self.b_io + self.w_ho @ h + self.b_ho)
+		# candidate state
+		g = torch.tanh(self.w_ic @ inputs + self.b_ic + self.w_hc @ h + self.b_hc)
+		# cell memory of current time step
+		c_current = f * c + i * g
+		# hidden state of current time step
+		h_current = o * torch.tanh(c_current)
+		return h_current, c_current
+
+	# initialization of hidden state and cell memory
+	def init_hidden(self, batch_size, hidden_size):
+		h_init = Parameter(torch.ones(batch_size,hidden_size).t())
+		c_init = Parameter(torch.ones(batch_size,hidden_size).t())
+		return h_init, c_init
+
+# LSTM model define multilayer-LSTM model
+class LSTM_layer(nn.Module):
+     def __init__(self,input_size,hidden_size,layer_num):
+        super(LSTM_layer,self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.num_layers = layer_num
+		# LSTM Cell list
+        self._all_layers = []
+        for i in range(self.num_layers):
+            layer_name = 'cell{}'.format(i)
+            if i==0:
+                cell = LSTM_Cell(self.input_size, self.hidden_size)#定义多层cell
+                cell.reset_weights()
+                setattr(self, layer_name, cell)#setattr 用于给类设置属性
+                self._all_layers.append(cell)
+            else:
+               cell = LSTM_Cell(self.hidden_size, self.hidden_size)#定义多层cell 第二层的输入为第一层的h输出
+               cell.reset_weights()
+               setattr(self, layer_name, cell)
+               self._all_layers.append(cell) #定义一个层结构，将定义的层都加入到层结构中
+     def forward(self, inputs):
+		# store internal state (hidden state, cell memory)
+            internal_state=[]
+            outputs=[] #
+            for t in range(inputs.size(0)):
+                x_step=inputs[t].t() #当前输入
+                for layer in range(self.num_layers):
+                    layer_name = 'cell{}'.format(layer)
+                    if t==0:
+                        batch_size = inputs[t].size()[0]
+                        h, c= getattr(self, layer_name).init_hidden(batch_size=batch_size,hidden_size=self.hidden_size)
+                        internal_state.append((h, c))
+                    (h, c)= internal_state[layer]   
+                    x_step, c_new= getattr(self,layer_name)(x_step,h,c)
+                    internal_state[layer] = (x_step, c_new)
+                outputs.append(x_step.t().unsqueeze(0))#在第一维增加维度，采用函数unsqueeze(0)
+            outputs = torch.cat(outputs, dim=0)#将三个张量合并为一个张量
+            return  outputs,(x_step, c_new)
+class M_Linear(nn.Module):
+    def __init__(self,hidden_size,output_size):
+        super(M_Linear,self).__init__()
+        self.hidden_size=hidden_size
+        self.output_size=output_size
+        self.w= Parameter(Tensor(hidden_size, output_size))
+        self.b=Parameter(Tensor(output_size))
+        self.reset_weights()
+    def reset_weights(self):
+        stdv = 1.0 / math.sqrt(self.hidden_size)
+        for weight in self.parameters():
+            init.uniform_(weight, -stdv, stdv)
+ 
+    def forward( self, x ): #参数 x  是一个Variable对象
+        x = x.mm(self.w)
+        return x + self.b.expand_as(x)  #让b的形状符合  输出的x的形状
+        
+
+#define the common LSTM model
+class my_model(nn.Module):
+     def __init__(self,input_size,hidden_size,layer_num,output_size): 
+        super(my_model, self).__init__()
+        self.input_size=input_size
+        self.hidden_size=hidden_size
+        self.layer_num=layer_num
+        #self.bidirection=bidirection
+        self.output_size=output_size
+        self.lstm =LSTM_layer(self.input_size, self.hidden_size,self.layer_num)
+        self.linear=M_Linear(self.hidden_size,self.output_size)
+     def forward(self,inputs):
+         r_out,(h_final, c_final)= self.lstm(inputs)
+         out =self.linear(r_out[-1, :, :])  #self.linear(h_final.t()) torch.sigmoid(self.linear(h_final.t()))
+         return   out
+         
+rnn = my_model(INPUT_SIZE, Hidden_size, Num_layers, Num_classes)
+criterion = nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(rnn.parameters(),lr=LR)
+epoch = 0
+for epoch in range(EPOCH):
+    for data in train_loader:
+        img, target = data
+        img = img.view(28, -1,28)
+        #img = img.squeeze(0)
+        img = Variable(img)
+        target = Variable(target)
+        out = rnn(img)
+        loss = criterion(out, target)
+        print_loss = loss.data.item()
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        epoch+=1
+        if epoch%100==0:
+             print('epoch: {}, loss: {:.4}'.format(epoch, loss.data.item()))
+             
+             
+#model test           
+rnn.eval()
+eval_loss = 0
+eval_acc = 0
+for data in test_loader:
+    img, target = data
+    img = img.view(28, -1,28)
+    out = rnn(img)
+    loss = criterion(out, target)
+    eval_loss+=loss.data.item()*target.size(0)
+    _, pred = torch.max(out, 1)
+    num_correct = (pred == target).sum()
+    eval_acc += num_correct.item()
+print('Test Loss: {:.6f}, Acc: {:.6f}'.format(
+    eval_loss / (len(test_dataset)),
+    eval_acc / (len(test_dataset))
+    ))
